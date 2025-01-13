@@ -1,0 +1,246 @@
+---
+title: "Horse Racing and Exploratory Data Analysis"
+author: "Jack Davis"
+
+output:
+  pdf_document: default
+  html_document: default
+---
+
+In this lesson, we are given a large dataset, in this case of horse race results, and our job is to use R to extract some basic facts about the dataset.
+
+# The PPDAC Model
+
+We can employ the PPDA model.
+
+- Problem: Describe what you want to do.
+- Plan: Figure out what you're doing while mistakes are cheap.
+- Data: Actually gather the data
+- Analysis: Turn data into insights.
+
+# Problem - What to do?
+
+Problem (General) - We want to diversify my sports analytics base, horseplaying is a blind spot.
+
+Problem  (Specific) - We want to estimate the probability that different horses win races.
+
+Problem (More specific) - estimate racing probabilities at Woodbine Racetrack in Toronto.
+
+# Plan - Subject knowledge
+
+Plan - What subject knowledge do We need first?
+
+- What the popular models that people try? Can we recreate them to tinker with them or improve?
+- Are there any interesting unanswered questions in the field?
+- What are the different betting options?
+- What is a perimutuel market?
+- What is lazix?
+- Is track effect worth looking into?
+- Is jockey effect worth looking into?
+
+![](Dummies.png)
+
+The "For Dummies" series is great for getting the basics of many different topic. This book contains a lot of information about the horse betting industry in the United States. It also explains how perimutuel betting works, and the basic variables to look for like jockey effects, different track conditions, and lazix usage.
+
+
+![](Precision.png)
+
+"Precision" contains information on popular modelling methods for horse racing, the statistical and programming background necessary to use the models, and some information on the horse racing industry in Hong Kong.
+
+
+Plan - What subject knowledge do We need first?
+
+- What the popular models that people try? Can we recreate them to tinker with them or improve? (Surprisingly ad-hoc)
+- Are there any interesting unanswered questions in the field? (Lots of exotic bets are suboptimal)
+- What are the different betting options? (Win, Place, Show, Trifecta, Pick-3)
+- What is a perimutuel market? (A bettor-vs-bettor market of odds, rather than bettor-vs-house)
+- What is lazix? (A drug to reduce internal bleeding, sometimes prescribed to horses, performance enhancing)
+- Is track effect worth looking into? (Yes, but how is complex)
+- Is jockey effect worth looking into? (Yes, and how is linear)
+
+
+# Data - Collection Premade
+
+- We need to see what data is available before we build a model. There's no use in relying on variables we can't get.
+
+- Someone else's pre-cleaned, pre-formatted data. Great for replicability. Not so great for getting a personal edge.
+
+- https://horseracingdatasets.com is a great start, but it doesn't have Woodbine race results
+
+- Daily Racing Form https://www.drf.com/ has excellent race results and data, but it costs $100 USD/month for 'unlimited' access (and a sports analytics version of 'unlimited' might violate some terms of service)
+
+- There are no 'horse racing' packages on CRAN
+
+# Data - Collection from racing programs
+
+- We want something that's available for many different racetracks, even though I'm starting this project on only one racetrack (START SMALL, LIKE A SINGLE RACE IF YOU HAVE TO)
+
+- Woodbine has programs that describe the races and the horses/riders/trainers/owners in detail. It's in PDF so we'd have to OCR (Optical Character Recognition, with the `tesseract` package in R) it.
+
+- Many racetracks have very similar programs on PDFs, so having a system to read them would be great and possibly scalable.
+
+
+
+![](Program.png)
+
+
+OCR works best when words are typed clearly (which they mostly are here), and in neat lines of the same size (which they are not)
+
+Text features can be extracted with regular expression-based functions from the `stringr` package.
+
+```{r, eval=FALSE, echo=TRUE}
+race_wday = str_extract(raw_race[1], "[a-zA-Z]+day")
+race_mday = str_extract(raw_race[1], "[a-zA-Z]+ [0-9]{1,2}")
+race_year = str_extract(raw_race[1], "20[0-9][0-9]")
+race_number = str_extract(raw_race[1], "Race [0-9]{1,2}")
+race_number = str_replace(race_number, "^Race ", "")
+```
+
+
+We can also clean OCR data with functions from the same package
+
+```{r, eval=FALSE, echo=TRUE}
+## Remove fancy apostrophe
+raw_all = str_replace_all(raw_all, "’", "'")
+raw_all = str_replace_all(raw_all, "”", "\"")
+raw_all = str_replace_all(raw_all, "[©=]", "")
+```
+
+```{r, eval=FALSE, echo=TRUE}
+JWidx = which(str_detect(raw_horse, "1[0-9 ]+"))[1]
+jockey_weight = str_extract(raw_horse[JWidx], "1[0-9 ][0-9]")
+jockey_weight = str_replace_all(jockey_weight, " ", "")
+```
+
+
+![](OCR_result.png)
+Even then, it was too inconsistent to use. According to the 'fail faster, fail cheaper' strategy, time for a new approach.
+
+
+# Data - Horse Racing Nation
+
+- https://www.horseracingnation.com 
+
+![](HRN_page.png)
+
+Horse racing nation has results in tables on the web. 
+
+We can try to scrape those with `rvest`, but their website has anti-bot tech. 
+
+So we'll do it directly with a mouse-and-keyboard macro using Asoftech Automation:
+
+- 1. Take first URL from a list in a notepad, 
+- 2. copy into address bar, 
+- 3. wait for page to load, 
+- 4. wait some more because page load times have variance,
+- 5. crtl + A, then crtl + C to grab all the text
+- 6. crtl + V in a notepad
+
+Record steps 1-6, set to repeat 200 times.
+
+
+Using similar text extraction and cleaning functions. 
+
+![](HRN_result.png)
+
+We don't have all the details of the program, but we can build upon this later with a data merge if we want.
+
+# Data - Horsepackage
+
+![](Stumash.png)
+
+Stumash's Horsepackage calculates box odds and trifecta probabilities using the Harville method, and has some sample data as well. Handy for testing things, and for future analyses. (Again, try to avoid redoing others' work if you can.)
+
+https://rdrr.io/github/stumash1/HorsePackage/
+
+# Anaysis - Exploratory Data Analysis
+
+What can we learn very quickly from the Horse Racing Nation dataset?
+
+First look at the data
+
+```{r, echo=TRUE}
+library(plyr)
+library(ggplot2)
+
+hrn = read.csv("HRN scraped data 2023-10-11.csv")
+head(hrn)
+```
+
+Next, how do the winning odds change with final place.
+
+```{r, echo=TRUE}
+ddply(hrn, "horse_place", summarize,
+      n = length(horse_odds_decimal),
+      median_odds = median(horse_odds_decimal),
+      mean_odds = mean(horse_odds_decimal),
+      sd_odds = sd(horse_odds_decimal))
+```      
+
+They do change. Will a set of histograms help?
+
+```{r, echo=TRUE}
+p1 <- ggplot(hrn, aes(x=horse_odds_decimal, fill=horse_place)) +
+    geom_histogram(alpha=0.6, binwidth = 1) +
+    facet_wrap(~horse_place)
+    
+p1
+```
+
+Let's flip the problem on its head. Looking at distribution of place as a function of decimal odds
+
+```{r, echo=TRUE}
+hrn$floor_odds = floor(hrn$horse_odds_decimal)
+
+tab1 = table(hrn$floor_odds, hrn$horse_place)
+tab1
+```
+
+Floor of zero? That means you'd win less than you risked (plus you money back). Is that a mistake?
+
+```{r, echo=TRUE}
+hrn[which(hrn$horse_odds_decimal < 1),]
+```
+
+No, Kazushi Kimura is just really REALLY good as a jockey.
+
+Now let's look at the outcomes as a proportion of the horses
+
+```{r, echo=TRUE}
+tab2 = round(prop.table(tab1, 1),3)
+tab2
+```
+ So the horses that pay less than 1/1 (plus your $1 back) win 57.1% of the time.
+ The horses that pay between 1/1 and 2/1 win 36.9% of the time, and so on.
+
+Let's plot this, and overlay 1/(x+1) to it as well because that's the "implied probability" in otherwords, if the odds paid out were "fair, that's what the win probability would be.
+
+```{r, echo=TRUE}
+actual_win_pr = tab2[,1]
+implied_win_pr = 1/(as.numeric(row.names(tab2)) + 1)
+floor_odds = as.numeric(row.names(tab2))
+
+plot(floor_odds, actual_win_pr, type="b", lwd=3, col="Red", ylim=c(0,1))
+lines(floor_odds, implied_win_pr, type="b", lwd=3, col="Blue", lty=3)
+```
+
+
+The blue line is 'fair' winning prob at a horse racetrack, the red line is the actual winning prob. The fact that the red line is always a bit below the blue line shows the consistent house advantage, which is unsurprizing.
+
+Because we took the floor of each odds offered, not the actual odds, the house advantage is exaggerated, especially at the low odds (the short odds).
+
+
+We can also get a ratio of actual to implied odds
+
+```{r, echo=TRUE}
+plot(floor_odds, actual_win_pr / implied_win_pr, type="b", lwd=3, col="Red", ylim=c(0,1))
+abline(h=1, lty=3, lwd=3, col="Blue")
+```
+
+
+It looks like horses that pay between 7-to-1 and 10-to-1 are the best bets. 
+
+However, we don't know the actual odds until just before race time, so this strategy is hard to refine. If we could predict the odds that would be paid out in advance (which we can model), and fit the probability of each horse winning each race (which we can also model), then we could look for discrepancies where we expect a horse to pay a better than fair price. This graph suggests we would find such horses in the 7-to-1 to 10-to-1 range.
+
+Note that this isn't the horses that most likely to win, they're the horses that have the largest payouts relative to their chance to win.
+

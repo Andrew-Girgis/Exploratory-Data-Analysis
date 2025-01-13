@@ -1,0 +1,776 @@
+---
+title: "STAT 847 Midterm Project"
+author: "Andrew Girgis"
+date: "2024-02-21"
+output: pdf_document
+header-includes:
+  \usepackage{fvextra}
+  \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+---
+
+```{r setup, include=FALSE}
+library(formatR)
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+## Importing Libraries
+```{r, message=FALSE}
+library(readr)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+```
+
+```{r, include=FALSE}
+setwd('/Users/andrew/Downloads/UW courses/STAT 847/Midterm')
+```
+
+## Importing Data
+```{r}
+dat_all = read.csv("Mind Monitor detailed data 2024-01-21.csv")
+```
+
+
+```{r, include=FALSE, echo = FALSE}
+
+dat_summary = ddply(dat_all, "sessionnum", summarise,
+      activity = activity[1],
+      session_time = session_time[1],
+      mean_alpha = mean(total_alpha, na.rm=TRUE),
+      mean_beta = mean(total_beta, na.rm=TRUE),
+      mean_gamma = mean(total_gamma, na.rm=TRUE),
+      mean_delta = mean(total_delta, na.rm=TRUE),
+      mean_theta = mean(total_theta, na.rm=TRUE),
+      
+      var_alpha = var(total_alpha, na.rm=TRUE),
+      var_beta =  var(total_beta, na.rm=TRUE),
+      var_gamma = var(total_gamma, na.rm=TRUE),
+      var_delta = var(total_delta, na.rm=TRUE),
+      var_theta = var(total_theta, na.rm=TRUE),
+      
+      blinks_minute = Nblinks[1]/session_time[1]*60,
+      jaws_minute = Njaw[1]/session_time[1]*60,
+      mean_pos_xy = mean(sqrt(Accelerometer_X^2 + Accelerometer_Y^2), na.rm=TRUE),
+      mad_accel = mean(abs(Accelerometer_X^2 + Accelerometer_Y^2 + Accelerometer_Z^2 - 1), na.rm=TRUE),
+      rmse_gyro = mean(sqrt(Gyro_X^2 + Gyro_Y^2 + Gyro_Z^2), na.rm=TRUE)
+)
+
+print(dat_summary)
+```
+
+\newpage
+## Question 1
+
+```{r}
+df_filtered_Q1 <- dat_all %>%
+  filter(Elements %in% c("/muse/elements/blink", "/muse/elements/jaw_clench"))
+
+```
+
+```{r}
+df_counts <- df_filtered_Q1 %>%
+  mutate(activity = ifelse(activity != 'resting' , 'active', activity)) %>%
+  group_by(activity, time_in_minute = (time_in %/% 60)) %>%
+  summarise(
+    blinks = sum(Elements == "/muse/elements/blink"),
+    jaw_clenches = sum(Elements == "/muse/elements/jaw_clench")
+  )
+```
+
+```{r}
+df_counts_active <- df_counts %>%
+  filter(activity %in% c("active"))
+```
+
+```{r}
+blinks_per_minute <- df_counts_active %>%
+  group_by(time_in_minute) %>%
+  summarise(blinks_count = sum(blinks))
+```
+
+
+```{r}
+# Set up the plotting device
+par(mfrow = c(2, 1))  # 2 rows, 1 column
+
+# Plot histogram for blinks
+
+# Create a bar plot
+ggplot(df_counts_active, aes(x = time_in_minute, y = blinks)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Time in Minute", y = "Number of Blinks", title = "Active Blinks Count by Minute") +
+  theme_minimal()
+
+
+# Plot histogram for jaw clenches
+ggplot(df_counts_active, aes(x = time_in_minute, y = jaw_clenches)) +
+  geom_bar(stat = "identity", fill = "red", color = "black") +
+  labs(x = "Time in Minute", y = "Number of Jaw Clenches", title = "Active Clenches Count by Minute") +
+  theme_minimal()
+
+
+```
+
+
+
+```{r, include=FALSE}
+df_counts_rest <- df_counts %>%
+  filter(activity %in% c("resting"))
+```
+
+```{r}
+# Set up the plotting device
+par(mfrow = c(2, 1))  # 2 rows, 1 column
+
+# Plot histogram for blinks
+
+# Create a bar plot
+ggplot(df_counts_rest, aes(x = time_in_minute, y = blinks)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Time in Minute", y = "Number of Blinks", title = "Resting Blinks Count by Minute") +
+  theme_minimal()
+
+
+# Plot histogram for jaw clenches
+ggplot(df_counts_rest, aes(x = time_in_minute, y = jaw_clenches)) +
+  geom_bar(stat = "identity", fill = "red", color = "black") +
+  labs(x = "Time in Minute", y = "Number of Jaw Clenches", title = "Resting Clenches Count by Minute") +
+  theme_minimal()
+```
+
+Looking at the histograms we can see that the blink count for active is typically greater than that of resting. Interestingly we see that the active blink counts have a downward trend were as in the resting state the count starts low then peaks around 10 minutes then a little hump around 25 minutes into the session then after 30 minutes into the session we see the number of blinks decrease.
+
+As for the jaw clenches we see that as the active session starts there is a large peak in both rest and active sessions after that we see that the jaw clenches in both types of sessions follow the same movenments as between 5-25 minutes we see a trough/dip in number of jaw clenches then after 25 minutes into a session the number of jaw clenches peak and there is a clear increase in number of jaw clenches till the end of the session.
+
+
+\newpage
+
+## Question 2
+
+```{r, include=FALSE}
+dat_summary$activity <- ifelse(dat_summary$activity == 'resting', 'resting', 'active' )
+```
+
+```{r, include=FALSE}
+# Convert 'activity' variable to a factor
+dat_summary$activity <- factor(dat_summary$activity, levels = c("active", "resting"))
+
+# Check levels of the 'activity' variable
+levels(dat_summary$activity)
+
+```
+
+```{r, include=FALSE}
+plot(mean_alpha ~ activity, data = dat_summary)
+```
+
+Alpha Brainwave
+
+```{r, tidy=TRUE}
+# Run the t-test
+t_test_result_alpha <- t.test(mean_alpha ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_alpha <- t_test_result_alpha$p.value
+
+# Set the significance level
+alpha <- 0.05
+
+# Perform the if-else statement
+if (p_value_alpha > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_alpha, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80) )
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_alpha, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+
+```
+
+```{r}
+# Run the t-test
+t_test_result_beta <- t.test(mean_beta ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_beta <- t_test_result_beta$p.value
+
+# Perform the if-else statement
+if (p_value_beta > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_beta, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_beta, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+```
+
+Gamma Brainwave
+
+```{r}
+ 
+# Run the t-test
+t_test_result_gamma <- t.test(mean_gamma ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_gamma <- t_test_result_gamma$p.value
+
+# Perform the if-else statement
+if (p_value_gamma > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_gamma, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_gamma, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+
+```
+
+Delta Brainwave
+
+```{r}
+ 
+# Run the t-test
+t_test_result_delta <- t.test(mean_delta ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_delta <- t_test_result_delta$p.value
+
+# Perform the if-else statement
+if (p_value_delta > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_delta, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_delta, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+```
+
+Theta Brainwave
+
+```{r}
+# Run the t-test
+t_test_result_theta <- t.test(mean_theta ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_theta <- t_test_result_theta$p.value
+
+# Perform the if-else statement
+if (p_value_theta > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_theta, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_theta, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+```
+
+
+Alpha Brainwave
+
+```{r}
+
+# Run the t-test
+t_test_var_alpha <- t.test(var_alpha ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_var_alpha <- t_test_var_alpha$p.value
+
+# Perform the if-else statement
+if (p_value_var_alpha > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_alpha, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80) )
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_alpha, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+
+```
+
+Beta Brainwave
+
+```{r}
+ 
+# Run the t-test
+t_test_var_beta <- t.test(var_beta ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_var_beta <- t_test_var_beta$p.value
+
+# Perform the if-else statement
+if (p_value_var_beta > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_beta, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80) )
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_beta, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+
+```
+
+Gamma Brainwave
+
+```{r}
+ 
+# Run the t-test
+t_test_var_gamma <- t.test(var_gamma ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_var_gamma <- t_test_var_gamma$p.value
+
+# Perform the if-else statement
+if (p_value_var_gamma > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_gamma, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80) )
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_gamma, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+
+```
+
+Delta Brainwave
+
+```{r}
+ 
+# Run the t-test
+t_test_var_delta <- t.test(var_delta ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_var_delta <- t_test_var_delta$p.value
+
+# Perform the if-else statement
+if (p_value_var_delta > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_delta, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80) )
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_delta, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+
+```
+
+Theta Brainwave
+
+```{r}
+# Run the t-test
+t_test_var_theta <- t.test(var_theta ~ activity, data = dat_summary)
+
+# Extract the p-value
+p_value_var_theta <- t_test_var_theta$p.value
+
+# Perform the if-else statement
+if (p_value_var_theta > alpha) {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_theta, ") is less than 0.05, we reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80) )
+} else {
+  cat(str_wrap(paste0("Since the p-value (", p_value_var_theta, ") is greater than or equal to 0.05, we fail to reject the null hypothesis that the true difference in means between group active and group resting is not equal to 0."), width = 80))
+}
+
+```
+
+\newpage
+
+
+## Question 3
+
+```{r}
+df_filtered_Q3 <- dat_all %>%
+  filter(sessionnum %in% c("1"))
+```
+
+```{r}
+percentile_20 <- quantile(df_filtered_Q3$time_in, 0.2)
+percentile_80 <- quantile(df_filtered_Q3$time_in, 0.8)
+
+# Filter the dataset to isolate the first active session
+top20_active_session <- subset(df_filtered_Q3, time_in <= percentile_20)
+
+# Filter the dataset to isolate the last 20% of active sessions
+last20_active_session <- subset(df_filtered_Q3, time_in >= percentile_80)
+
+
+```
+
+```{r}
+# Create a data frame combining both variables
+Q3_alpha_data <- data.frame(
+  Group = c(rep("First 20%", length(top20_active_session$total_alpha)), 
+            rep("Last 20%", length(last20_active_session$total_alpha))),
+  Total_Alpha = c(top20_active_session$total_alpha, last20_active_session$total_alpha)
+)
+
+# Reorder the levels of the Group factor variable
+Q3_alpha_data$Group <- factor(Q3_alpha_data$Group, levels = c("First 20%", "Last 20%"))
+
+# Create a ggplot for side-by-side boxplots with reordered groups
+ggplot(Q3_alpha_data, aes(x = Group, y = Total_Alpha, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Total Alpha by Start and End of Session", y = "Total Alpha") +
+  theme_minimal()
+
+```
+
+No there are no notable differences in the alpha brainwaves in the first 20% vs the last 20% of the session. We can see this from the box plots of the two different intervals looking almost identical. Alpha waves are the brain waves of relaxation so it is clear to see that the patient is typically relaxed at the start and end of sessions.
+
+```{r}
+# Create a data frame combining both variables
+Q3_beta_data <- data.frame(
+  Group = c(rep("First 20%", length(top20_active_session$total_beta)), 
+            rep("Last 20%", length(last20_active_session$total_beta))),
+  Total_Beta = c(top20_active_session$total_beta, last20_active_session$total_beta)
+)
+
+# Reorder the levels of the Group factor variable
+Q3_beta_data$Group <- factor(Q3_beta_data$Group, levels = c("First 20%", "Last 20%"))
+
+# Create a ggplot for side-by-side boxplots
+ggplot(Q3_beta_data, aes(x = Group, y = Total_Beta, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Total Beta by Start and End of Session", y = "Total Beta") +
+  theme_minimal()
+
+```
+While there is a difference in the two boxplots I dont believe there is a significant/notable differences between beta waves in the first 20% and the last 20% interval of a session. The average of the two groupes are very similar between to the two different intervals.
+
+```{r}
+# Create a data frame combining both variables
+Q3_gamma_data <- data.frame(
+  Group = c(rep("First 20%", length(top20_active_session$total_gamma)), 
+            rep("Last 20%", length(last20_active_session$total_gamma))),
+  Total_Gamma = c(top20_active_session$total_gamma, last20_active_session$total_gamma)
+)
+
+# Reorder the levels of the Group factor variable
+Q3_gamma_data$Group <- factor(Q3_gamma_data$Group, levels = c("First 20%", "Last 20%"))
+
+# Create a ggplot for side-by-side boxplots
+ggplot(Q3_gamma_data, aes(x = Group, y = Total_Gamma, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Total Gamma by Start and End of Session", y = "Total Gamma") +
+  theme_minimal()
+
+```
+
+Again similar to the beta waves we observe there is a difference in the two boxplots. However, I dont believe there is a significant/notable differences between gamma waves in the first 20% and the last 20% interval of a session. Again similarly to the beta waves the average of the two groups are very similar between to the two different intervals.I believe this is due to beta and gamma waves having similar functions (beta higher during activities, gamma higher during times of focus and thinking)
+
+
+
+
+\newpage
+
+
+## Question 4
+
+```{r}
+df_filtered_Q4 <- dat_all %>%
+  filter(sessionnum %in% c("2"))
+```
+
+```{r}
+percentile_20 <- quantile(df_filtered_Q4$time_in, 0.2)
+percentile_80 <- quantile(df_filtered_Q4$time_in, 0.8)
+
+# Filter the dataset to isolate the first active session
+top20_active_session_Q4 <- subset(df_filtered_Q4, time_in <= percentile_20)
+
+# Filter the dataset to isolate the last 20% of active sessions
+last20_active_session_Q4 <- subset(df_filtered_Q4, time_in >= percentile_80)
+
+
+```
+
+```{r}
+# Create a data frame combining both variables
+Q4_alpha_data <- data.frame(
+  Group = c(rep("First 20%", length(top20_active_session_Q4$total_alpha)), 
+            rep("Last 20%", length(last20_active_session_Q4$total_alpha))),
+  Total_Alpha = c(top20_active_session_Q4$total_alpha, last20_active_session_Q4$total_alpha)
+)
+
+# Reorder the levels of the Group factor variable
+Q4_alpha_data$Group <- factor(Q4_alpha_data$Group, levels = c("First 20%", "Last 20%"))
+
+# Create a ggplot for side-by-side boxplots with reordered groups
+ggplot(Q4_alpha_data, aes(x = Group, y = Total_Alpha, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Total Alpha by Start and End of Session", y = "Total Alpha") +
+  theme_minimal()
+
+```
+
+No there are no notable differences in the alpha brainwaves in the first 20% vs the last 20% of the session. We can see this from the box plots of the two different intervals looking almost identical. Alpha waves are the brain waves of relaxation so it is clear to see that the patient is typically relaxed at the start and end of sessions.
+
+```{r}
+# Create a data frame combining both variables
+Q4_delta_data <- data.frame(
+  Group = c(rep("First 20%", length(top20_active_session_Q4$total_delta)), 
+            rep("Last 20%", length(last20_active_session_Q4$total_delta))),
+  Total_Delta = c(top20_active_session_Q4$total_delta, last20_active_session_Q4$total_delta)
+)
+
+# Reorder the levels of the Group factor variable
+Q4_delta_data$Group <- factor(Q4_delta_data$Group, levels = c("First 20%", "Last 20%"))
+
+# Create a ggplot for side-by-side boxplots with reordered groups
+ggplot(Q4_delta_data, aes(x = Group, y = Total_Delta, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Total Delta by Start and End of Session", y = "Total Delta") +
+  theme_minimal()
+
+```
+
+For the delta brain waves in a resting session we see a large difference in the spread of the waves in the beginning of a session (first 20%) and the end of a session(last 20%). This is likely due to the delta wave not being very high in the beginning of a session since delta brain waves track deep rest/sleep, then soon into a resting session we sharp increase in delta when falling asleep leading to the large spread in first 20% that is not seen in last 20%.
+
+```{r}
+# Create a data frame combining both variables
+Q4_theta_data <- data.frame(
+  Group = c(rep("First 20%", length(top20_active_session_Q4$total_theta)), 
+            rep("Last 20%", length(last20_active_session_Q4$total_theta))),
+  Total_Theta = c(top20_active_session_Q4$total_theta, last20_active_session_Q4$total_theta)
+)
+
+# Reorder the levels of the Group factor variable
+Q4_theta_data$Group <- factor(Q4_theta_data$Group, levels = c("First 20%", "Last 20%"))
+
+# Create a ggplot for side-by-side boxplots with reordered groups
+ggplot(Q4_theta_data, aes(x = Group, y = Total_Theta, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Total Theta by Start and End of Session", y = "Total Theta") +
+  theme_minimal()
+
+
+```
+
+When looking at the differences of the theta brainwaves in the beginning vs the end of a session we can see a difference in the mean as the beginning is typically around 1.35 and the when of a session is typically around 0.8. This is likely due to the function of the theta brain waves, based on my research the theta brainwaves are linked to light sleep/daydreaming that is why it is typically higher in the beginning of a session where the patient may be tired in a state of light sleep, then later into the session while the patient is asleep the theta brainwaves would have decreased.
+
+
+\newpage
+
+## Question 5
+
+```{r}
+# Load required libraries
+library(dplyr)
+
+# Step 1: Calculate the correlation between Alpha_TP9 and Alpha_TP10 for each session in the detailed dataset
+correlation_data <- dat_all %>%
+  group_by(sessionnum) %>%
+  summarise(correlation = cor(Alpha_TP9, Alpha_TP10, method = "pearson", use = "complete.obs"))
+
+# Step 2: Merge correlation values with the summary dataset based on session ID
+dat_summary <- left_join(dat_summary, correlation_data, by = "sessionnum")
+
+# Step 3: Compare the correlations between resting and non-resting activities
+correlation_comparison <- dat_summary %>%
+  group_by(activity) %>%
+  summarise(mean_correlation = mean(correlation, na.rm = TRUE))
+
+# Print the comparison
+print(correlation_comparison)
+
+```
+
+```{r}
+ggplot(dat_summary, aes(x = activity, y = correlation, fill = activity)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Correlation between Alpha_TP9 and Alpha_TP10 by Activity",
+       x = "Activity",
+       y = "Correlation") +
+  theme_minimal()
+```
+
+From this boxplot we can see that the Alpha TP9 and Alpha TP10 while resting are typically highly correlated since we observe their average being closer to 1. However while active the Alpha TP9 and Alpha TP10 brainwaves have a lower correlation leading us to believe that the left and right sides of the brain are less synchrnized while active compared to during rest.
+
+
+\newpage
+
+## Question 6
+
+```{r}
+library(dplyr)
+
+# Create Q6_dat with recoded activity column
+Q6_dat <- dat_all %>%
+  mutate(activity = ifelse(activity == 'resting', 'resting', 'active'))
+
+resting_position <- Q6_dat %>%
+  filter(activity == "resting") %>%
+  summarise(mean_acceleration_X = mean(Accelerometer_X, na.rm = TRUE),
+            mean_acceleration_Y = mean(Accelerometer_Y, na.rm = TRUE),
+            mean_acceleration_Z = mean(Accelerometer_Z, na.rm = TRUE))
+
+active_position <- Q6_dat %>%
+  filter(activity == "active") %>%
+  summarise(mean_acceleration_X = mean(Accelerometer_X, na.rm = TRUE),
+            mean_acceleration_Y = mean(Accelerometer_Y, na.rm = TRUE),
+            mean_acceleration_Z = mean(Accelerometer_Z, na.rm = TRUE))
+
+cat("\nMean acceleration in resting state (X, Y, Z):", paste(resting_position, collapse = ", "), "\n")
+cat("Mean acceleration in non-resting state (X, Y, Z):", paste(active_position, collapse = ", "), "\n")
+
+```
+
+
+```{r}
+library(ggplot2)
+
+# Create a box plot comparing accelerometer axes for resting and active states
+ggplot(Q6_dat, aes(x = activity, y = Accelerometer_X, fill = activity)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Accelerometer X by Activity", y = "Accelerometer X") +
+  theme_minimal()
+
+ggplot(Q6_dat, aes(x = activity, y = Accelerometer_Y, fill = activity)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Accelerometer Y by Activity", y = "Accelerometer Y") +
+  theme_minimal()
+
+ggplot(Q6_dat, aes(x = activity, y = Accelerometer_Z, fill = activity)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Accelerometer Z by Activity", y = "Accelerometer Z") +
+  theme_minimal()
+
+```
+
+
+Head position was more upright when active than when resting, and we know this because the accelerometer showed averages close to X=0, Y=0, Z=1 instead of the X=-0.7, Y=0.3, and Z=0.5.
+
+Another observation we can make is that we see that the head position was more tilted forward when active than when resting, and we know this because the accelerometer showed positive acceleration along the X-axis instead of negative acceleration.
+
+\newpage
+
+
+## Question 7
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Subset the detailed dataset for session number 11
+session_11_data <- dat_all %>%
+  filter(sessionnum == 11)
+
+# Step 2: Calculate moving averages for each brainwave band
+window_size <- 20  # You can adjust the window size as needed
+
+session_11_data <- session_11_data %>%
+  mutate(
+    smoothed_alpha = zoo::rollmean(total_alpha, k = window_size, fill = NA),
+    smoothed_beta = zoo::rollmean(total_beta, k = window_size, fill = NA),
+    smoothed_gamma = zoo::rollmean(total_gamma, k = window_size, fill = NA),
+    smoothed_delta = zoo::rollmean(total_delta, k = window_size, fill = NA),
+    smoothed_theta = zoo::rollmean(total_theta, k = window_size, fill = NA)
+  )
+
+# Step 3: Plot the smoothed brainwaves
+ggplot(session_11_data, aes(x = time_in)) +
+  geom_line(aes(y = smoothed_alpha, color = "Alpha")) +
+  geom_line(aes(y = smoothed_beta, color = "Beta")) +
+  geom_line(aes(y = smoothed_gamma, color = "Gamma")) +
+  geom_line(aes(y = smoothed_delta, color = "Delta")) +
+  geom_line(aes(y = smoothed_theta, color = "Theta")) +
+  labs(title = "Smoothed Brainwaves for Session 11",
+       x = "Time (seconds)",
+       y = "Brainwave Amplitude") +
+  scale_color_manual(name = "Brainwave Bands",
+                     values = c(Alpha = "red", Beta = "blue", Gamma = "green", Delta = "orange", Theta = "purple")) +
+  theme_minimal()
+
+```
+
+I believe the patient fell asleep around 400 seconds into the session. I believe this because at approximately 400 seconds into the session we see that the delta and theta waves peak and the alpha, gamma and beta waves begin their decline. 
+
+\newpage
+
+## Question 8 
+
+
+```{r}
+library(dplyr)
+
+Q8_dat <- dat_all
+
+# Replace alpha values equal to 0 with NA and calculate average alpha by sessionnum
+mean_alpha_data <- Q8_dat %>%
+  mutate_at(vars(starts_with("Alpha")), ~ifelse(. == 0, NA, .)) %>%  # Replace 0 with NA for all Alpha columns
+  group_by(sessionnum) %>%
+  summarise(
+    mean_alpha_TP9 = mean(Alpha_TP9, na.rm = TRUE),
+    mean_alpha_AF7 = mean(Alpha_AF7, na.rm = TRUE),
+    mean_alpha_AF8 = mean(Alpha_AF8, na.rm = TRUE),
+    mean_alpha_TP10 = mean(Alpha_TP10, na.rm = TRUE),
+    mean_all_alphas = mean(c(Alpha_TP9, Alpha_AF7, Alpha_AF8, Alpha_TP10), na.rm = TRUE)
+  )
+
+```
+
+| sessionnum | mean_all_alphas |
+|------------|-----------------|
+| 1          | 0.6284183       |
+| 2          | 0.6741808       |
+| 3          | 0.4848378       |
+| 4          | 0.3978894       |
+| 5          | 0.5270034       |
+| 6          | 0.9090064       |
+| 7          | 0.6000797       |
+| 8          | 0.4817694       |
+| 9          | 0.6282106       |
+| 10         | 0.4244419       |
+| 11         | 0.5791480       |
+| 12         | 0.6807798       |
+| 13         | 0.6846666       |
+| 14         | 0.7663693       |
+| 15         | 0.7227846       |
+| 16         | 0.5719564       |
+| 17         | 0.5108763       |
+| 18         | 0.5241236       |
+| 19         | 0.6455830       |
+| 20         | 0.6364634       |
+| 21         | 0.6268620       |
+
+
+
+
+\newpage
+
+## Question 9
+
+```{r}
+ggplot(df_counts_active, aes(x = time_in_minute, y = blinks)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Time in Minute", y = "Number of Blinks", title = "Active Blinks Count by Minute") +
+  theme_minimal()
+```
+
+One interesting pattern I found in the data when doing question 1 was that as time increases into an active session, the patient blinks less over time. This phenomenon may be caused by a tendency to reduce the number of times we blink, known as blink frequency, when we are looking at a computer or other digital device’s screen. Blinking is an automatic reflex that we don't pay much attention to. However, blinking serves a crucial role in protecting our eyes.
+
+Reports suggest that blink frequency decreases by 66% when we are looking at a screen, which is partly attributed to reduced blinking during periods of concentration and information processing, known as cognitive demand. Additionally, incomplete blinks, where the tear film is not spread evenly over the entire eye, are more common during screen viewing, resulting in less effective lubrication. While studies comparing blink frequency between printed pages and computer screens are inconclusive, symptoms of computer vision syndrome, such as eye strain, are often worse after sustained computer use compared to working from printed pages.
+
+Therefore, the observed reduction in blinking frequency during active sessions could be attributed to prolonged screen time, highlighting the importance of adopting strategies to protect eye health in the digital age.
+
+
+
+```{r}
+ggplot(session_11_data, aes(x = time_in)) +
+  geom_line(aes(y = smoothed_alpha, color = "Alpha")) +
+  geom_line(aes(y = smoothed_beta, color = "Beta")) +
+  geom_line(aes(y = smoothed_gamma, color = "Gamma")) +
+  geom_line(aes(y = smoothed_delta, color = "Delta")) +
+  geom_line(aes(y = smoothed_theta, color = "Theta")) +
+  labs(title = "Smoothed Brainwaves for Session 11",
+       x = "Time (seconds)",
+       y = "Brainwave Amplitude") +
+  scale_color_manual(name = "Brainwave Bands",
+                     values = c(Alpha = "red", Beta = "blue", Gamma = "green", Delta = "orange", Theta = "purple")) +
+  theme_minimal()
+```
+
+```{r}
+ggplot(df_counts_rest, aes(x = time_in_minute, y = blinks)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Time in Minute", y = "Number of Blinks", title = "Resting Blinks Count by Minute") +
+  theme_minimal()
+```
+
+
+Another interesting pattern I found using a combination of the smoothed brainwave graph and the resting blinks per minute histogram was that we can see the sleep stages the patient goes through during a resting session. Firstly from Question 7 found that the patient fell asleep around 400 seconds (approx 7 mins) into the session. However to take this even further we can see using the resting blinks count by minute histogram that the number of blinks peaks around 10 minutes into a session this is while the patient is in stage one sleep where REM (Rapid Eye Movement) sleep is typical. We then see  sleep spindles and K complexes between the 1000 to 2000 second (approx 17 to 34 mins) time interval which is common of stage 2 sleep, this stage represents deeper sleep as the heart rate and body temperature drop. Then lastly between 2200 to 2500 we see that the delta waves which typically represent deep sleep peak, this indicates the patient going into (Stage 3) - Deepest Non-REM Sleep.
+
+
+
+\newpage
+
+## References
+
+Cassidy, S. (2023, November 24). Blink and you’ll miss it: Computer vision syndrome and managing eye health in a new era of online learning and teaching. Applied Cognition Research Group. https://hub.salford.ac.uk/appliedcognition/2021/08/27/2068/#:~:text=We%20blink%20on%20average%20around,information%2C%20known%20as%20cognitive%20demand. 
+
+JK;, C. C. M. (n.d.). Blink patterns: Reading from a computer screen versus hard copy. Optometry and vision science: official publication of the American Academy of Optometry. https://pubmed.ncbi.nlm.nih.gov/24413278/ 
+
+
+
+
+
